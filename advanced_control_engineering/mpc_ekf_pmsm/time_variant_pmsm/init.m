@@ -1,6 +1,8 @@
-clear all
 close all
+clear all
 clc
+beep off
+pm_addunit('percent', 0.01, '1');
 
 %% simdata
 fPWM_INV = 8e3;
