@@ -31,7 +31,7 @@ w0 = 2*2*pi;
 filter_ref = w0^2/(s^2+2*w0*s+w0^2);
 filterd_ref = c2d(filter_ref,tcontrol);
 
-open_system('pmsm_mpc_ekf');
+open_system('psm_nonlinear_obs');
 
 
 
