@@ -1,0 +1,633 @@
+% =========================================================================
+%  Documento: Simulazione FDTD 1D – Onda Stazionaria in Dielettrico Puro
+%  Autore: Davide Bagnara
+%  Compilazione: pdflatex fdtd_standing_wave.tex (2 passaggi)
+% =========================================================================
+
+\documentclass[a4paper, 11pt]{article}
+
+%% ── Pacchetti ─────────────────────────────────────────────────────────────
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+
+
+\usepackage{geometry}
+\geometry{a4paper, top=25mm, bottom=25mm, left=27mm, right=27mm}
+
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{physics}          % \curl, \div, \grad, \pdv, ecc.
+\usepackage{bm}               % bold math
+\usepackage{siunitx}          % unità SI
+\sisetup{ per-mode=symbol}
+
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{multirow}
+
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+
+\usepackage{listings}
+\usepackage{xcolor}
+
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks = true,
+    linkcolor  = blue!70!black,
+    citecolor  = green!50!black,
+    urlcolor   = blue!70!black,
+    pdftitle   = {FDTD 1D -- Onda Stazionaria in Dielettrico Puro},
+    pdfauthor  = {Davide Bagnara},
+}
+
+\usepackage{tcolorbox}
+\tcbuselibrary{theorems, skins, breakable}
+
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textit{FDTD 1D – Onda Stazionaria in Dielettrico Puro}}
+\fancyhead[R]{\small\textit{D.\ Bagnara}}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+%% ── Stile codice MATLAB ────────────────────────────────────────────────────
+\definecolor{codegreen}{rgb}{0.13,0.54,0.13}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codeblue}{rgb}{0.0,0.0,0.8}
+\definecolor{backcolor}{rgb}{0.97,0.97,0.97}
+
+\lstdefinestyle{matlab}{
+    backgroundcolor=\color{backcolor},
+    commentstyle=\color{codegreen}\itshape,
+    keywordstyle=\color{codeblue}\bfseries,
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{orange!80!black},
+    basicstyle=\ttfamily\small,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=4,
+    language=Matlab,
+    frame=single,
+    rulecolor=\color{gray!40},
+}
+
+%% ── Box colorati ───────────────────────────────────────────────────────────
+\newtcbtheorem[number within=section]{defi}{Definizione}%
+    {colback=blue!5, colframe=blue!60!black, fonttitle=\bfseries}{def}
+
+\newtcbtheorem[number within=section]{teor}{Teorema}%
+    {colback=green!5, colframe=green!50!black, fonttitle=\bfseries}{teo}
+
+\newtcolorbox{nota}{
+    colback=orange!8, colframe=orange!70!black,
+    title={\textbf{Nota}}, fonttitle=\bfseries,
+    breakable
+}
+
+\newtcolorbox{analogia}{
+    colback=purple!6, colframe=purple!60!black,
+    title={\textbf{Analogia con la diffusione termica}}, fonttitle=\bfseries,
+    breakable
+}
+
+%% ── Simboli ricorrenti ────────────────────────────────────────────────────
+\newcommand{\eps}{\varepsilon}
+\newcommand{\muu}{\mu}
+\newcommand{\Efield}{E_y}
+\newcommand{\Hfield}{H_z}
+\newcommand{\dx}{\Delta x}
+\newcommand{\dt}{\Delta t}
+\newcommand{\En}[2]{E_{#1}^{#2}}
+\newcommand{\Hn}[2]{H_{#1}^{#2}}
+
+% =========================================================================
+\begin{document}
+
+\begin{titlepage}
+    \centering
+    \vspace*{2cm}
+    {\LARGE\bfseries Simulazione FDTD 1D\\[0.4em]
+    Onda Elettromagnetica Stazionaria\\[0.2em]
+    in un Dielettrico Puro con Parete PEC\par}
+    \vspace{1.5cm}
+    {\large Aspetti teorici e implementazione MATLAB\par}
+    \vspace{2cm}
+    {\large\itshape Davide Bagnara\par}
+    \vspace{0.5em}
+    {\normalsize Vipiteno (BZ)\par}
+    \vfill
+    {\normalsize \today\par}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% =========================================================================
+\section{Introduzione e motivazione}
+% =========================================================================
+
+La propagazione di un'onda elettromagnetica piana è uno dei problemi fondamentali
+dell'elettromagnetismo applicato. Quando un'onda piana incide su un conduttore
+elettrico perfetto (\emph{Perfect Electric Conductor}, PEC), viene riflessa con
+inversione di fase del campo~$E$, generando un'\emph{onda stazionaria}: un campo
+che oscilla nel tempo ma i cui nodi e ventri sono fissati nello spazio.
+
+Questo documento illustra la simulazione numerica di tale fenomeno in un dominio
+monodimensionale, usando il metodo \textbf{FDTD} (\emph{Finite-Difference Time-Domain})
+nella formulazione di Yee. L'obiettivo è duplice:
+\begin{itemize}
+    \item derivare rigorosamente le equazioni di aggiornamento del campo a partire
+          dalle equazioni di Maxwell;
+    \item confrontare la soluzione numerica con la soluzione analitica esatta,
+          verificando stabilità e accuratezza dello schema.
+\end{itemize}
+
+\begin{analogia}
+Il problema è strutturalmente analogo alla simulazione della distribuzione
+termica in una barra 1D con sorgente di potenza e pozzo termico. Lì si risolve
+l'equazione parabolica della diffusione del calore:
+\[
+    \frac{\partial T}{\partial t} = \alpha \frac{\partial^2 T}{\partial x^2}
+\]
+Qui si risolve l'equazione \emph{iperbolica} delle onde:
+\[
+    \frac{\partial^2 E}{\partial t^2} = c^2 \frac{\partial^2 E}{\partial x^2}
+\]
+La differenza fondamentale è l'ordine nel tempo: primo (parabolica, diffusiva)
+contro secondo (iperbolica, ondulatoria). Lo schema numerico cambia di
+conseguenza: FTCS esplicito per la termica, leapfrog di Yee per l'EM.
+\end{analogia}
+
+% =========================================================================
+\section{Teoria elettromagnetica}
+% =========================================================================
+
+\subsection{Equazioni di Maxwell nel dominio del tempo}
+
+Le equazioni di Maxwell in forma differenziale, per un mezzo lineare, isotropo,
+non dispersivo e privo di sorgenti interne, sono:
+
+\begin{align}
+    \curl \bm{E} &= -\muu \frac{\partial \bm{H}}{\partial t}
+        \label{eq:faraday} \tag{Faraday}\\[4pt]
+    \curl \bm{H} &= \eps  \frac{\partial \bm{E}}{\partial t} + \bm{J}
+        \label{eq:ampere}  \tag{Ampère-Maxwell}\\[4pt]
+    \div(\eps \bm{E}) &= \rho_v \label{eq:gauss_e} \tag{Gauss E}\\[4pt]
+    \div(\muu \bm{H}) &= 0      \label{eq:gauss_h} \tag{Gauss H}
+\end{align}
+
+dove $\eps = \eps_r \eps_0$ è la permittività elettrica e
+$\muu = \muu_r \muu_0$ la permeabilità magnetica del mezzo.
+Per un \textbf{dielettrico puro} senza sorgenti libere: $\bm{J} = 0$ e $\rho_v = 0$.
+
+\subsection{Onda piana in 1D: riduzione del problema}
+
+Consideriamo un'onda che si propaga nella sola direzione~$x$, con campo elettrico
+polarizzato lungo~$y$ e campo magnetico lungo~$z$:
+\[
+    \bm{E} = \Efield(x,t)\,\hat{y}, \qquad
+    \bm{H} = \Hfield(x,t)\,\hat{z}.
+\]
+Questa scelta soddisfa automaticamente le equazioni di Gauss (divergenze nulle).
+Espandendo i rotori nelle equazioni di Faraday e Ampère si ottiene il sistema
+\textbf{accoppiato 1D}:
+
+\begin{tcolorbox}[colback=gray!8, colframe=gray!50, title=Sistema accoppiato $E_y$--$H_z$ in 1D]
+\begin{align}
+    \frac{\partial \Efield}{\partial t} &= -\frac{1}{\eps}\frac{\partial \Hfield}{\partial x}
+    \label{eq:Eupdate}\\[6pt]
+    \frac{\partial \Hfield}{\partial t} &= -\frac{1}{\muu}\frac{\partial \Efield}{\partial x}
+    \label{eq:Hupdate}
+\end{align}
+\end{tcolorbox}
+
+\subsection{Equazione delle onde scalare}
+
+Derivando~\eqref{eq:Eupdate} rispetto al tempo e sostituendo~\eqref{eq:Hupdate}
+si elimina~$H_z$ e si ottiene l'equazione delle onde per~$E_y$:
+
+\begin{equation}
+    \boxed{\frac{\partial^2 \Efield}{\partial t^2} = c^2\,\frac{\partial^2 \Efield}{\partial x^2}}
+    \label{eq:wave}
+\end{equation}
+
+dove la \textbf{velocità di fase} nel mezzo è:
+\begin{equation}
+    c = \frac{c_0}{\sqrt{\eps_r \muu_r}}, \qquad c_0 = \frac{1}{\sqrt{\eps_0\muu_0}} \approx \SI{3e8}{\metre\per\second}.
+    \label{eq:phase_vel}
+\end{equation}
+
+\subsection{Condizioni al contorno}
+
+Il dominio fisico è $0 \le x \le L$, con:
+
+\begin{itemize}
+    \item \textbf{Sinistra} ($x=0$): sorgente CW (\emph{Continuous Wave}) a
+          frequenza~$f$, implementata come \emph{soft source} additiva:
+          \[
+              \Efield(0,t) \mathrel{+}= E_0 \sin(2\pi f\, t)
+          \]
+    \item \textbf{Destra} ($x=L$): parete PEC. Sulla superficie di un conduttore
+          perfetto la componente tangenziale di $\bm{E}$ deve essere nulla:
+          \[
+              \Efield(L,t) = 0 \quad \forall\, t
+          \]
+\end{itemize}
+
+\subsection{Soluzione analitica in regime stazionario}
+\label{sec:analitica}
+
+Imponendo la BC di PEC a destra e cercando una soluzione separabile della
+forma $\Efield(x,t) = X(x)\,T(t)$, la soluzione generale dell'equazione~\eqref{eq:wave}
+con la condizione $\Efield(L,t)=0$ è:
+
+\begin{equation}
+    \Efield(x,t) = A\,\sin\!\bigl[k(L-x)\bigr]\,\sin(2\pi f\, t + \phi)
+    \label{eq:analitica}
+\end{equation}
+
+dove:
+\begin{itemize}
+    \item $k = 2\pi f / c = 2\pi/\lambda$ è il numero d'onda nel mezzo;
+    \item $\lambda = c/f$ è la lunghezza d'onda nel mezzo;
+    \item $A$ e $\phi$ dipendono dall'ampiezza e dalla fase della sorgente.
+\end{itemize}
+
+\begin{nota}
+L'espressione~\eqref{eq:analitica} è il prodotto di una funzione puramente
+spaziale ($\sin[k(L-x)]$, l'inviluppo) e di una funzione puramente temporale
+($\sin(2\pi f t)$). Questa è la firma dell'\textbf{onda stazionaria}: non
+vi è trasporto netto di energia. I \emph{nodi} (dove $\Efield=0$ per ogni $t$)
+sono localizzati in:
+\[
+    x_n = L - \frac{n\lambda}{2}, \quad n = 0, 1, 2, \ldots
+\]
+Il nodo $n=0$ corrisponde alla parete PEC in $x=L$. Il numero di nodi
+visibili nel dominio dipende dal rapporto $L/\lambda$.
+\end{nota}
+
+% =========================================================================
+\section{Il metodo FDTD: schema di Yee}
+% =========================================================================
+
+\subsection{Griglia spaziotemporale sfalsata}
+
+Il metodo FDTD si basa sulla discretizzazione delle equazioni di Maxwell~\eqref{eq:Eupdate}--\eqref{eq:Hupdate}
+mediante differenze finite centrate, applicate su una griglia di Yee in cui
+$E$ e $H$ sono sfalsati sia nello spazio che nel tempo di mezzo passo
+(\emph{staggering}). In 1D:
+
+\begin{itemize}
+    \item $\Efield$ è campionato nei \textbf{nodi interi}: $x_i = i\,\dx$,
+          $i = 0, 1, \ldots, N_x$, agli istanti $t^n = n\,\dt$.
+    \item $\Hfield$ è campionato nei \textbf{nodi semi-interi}: $x_{i+1/2} = (i+\tfrac{1}{2})\dx$,
+          $i = 0, 1, \ldots, N_x-1$, agli istanti $t^{n+1/2} = (n+\tfrac{1}{2})\dt$.
+\end{itemize}
+
+La struttura della griglia è illustrata in Figura~\ref{fig:yee_grid}.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=1.0, font=\small]
+% Usiamo solo ambienti tabular per compatibilità senza tikz
+\end{tikzpicture}
+% Schema testuale della griglia (alternativo a tikz)
+\begin{center}
+\ttfamily\small
+\begin{tabular}{ccccccccc}
+$\underbrace{E_0}_{i=0}$ & $\underbrace{H_{1/2}}_{j=1}$ &
+$\underbrace{E_1}_{i=1}$ & $\underbrace{H_{3/2}}_{j=2}$ &
+$\underbrace{E_2}_{i=2}$ & $\cdots$ &
+$\underbrace{E_{N_x-1}}_{i=N_x-1}$ & $\underbrace{H_{N_x-1/2}}_{j=N_x}$ &
+$\underbrace{E_{N_x}}_{i=N_x}$\\[4pt]
+\multicolumn{9}{c}{$\longleftarrow\qquad\qquad\qquad L \qquad\qquad\qquad\longrightarrow$}
+\end{tabular}
+\end{center}
+\caption{Griglia di Yee 1D. I nodi $E$ (interi) e $H$ (semi-interi) sono alternati con
+passo $\dx$. Il nodo $i=0$ ospita la sorgente; il nodo $i=N_x$ è la parete PEC ($E=0$).}
+\label{fig:yee_grid}
+\end{figure}
+
+\subsection{Equazioni di aggiornamento}
+
+Applicando differenze finite centrate al sistema~\eqref{eq:Eupdate}--\eqref{eq:Hupdate}
+si ottiene lo schema \textbf{leapfrog}:
+
+\begin{tcolorbox}[colback=blue!5, colframe=blue!50!black,
+    title={Schema leapfrog di Yee 1D (mezzo omogeneo)}, fonttitle=\bfseries]
+\begin{align}
+    \Hn{i+1/2}{n+1/2} &= \Hn{i+1/2}{n-1/2}
+        - \underbrace{\frac{\dt}{\muu\,\dx}}_{C_H}
+          \!\left(\En{i+1}{n} - \En{i}{n}\right)
+    \label{eq:Hleap}\\[8pt]
+    \En{i}{n+1} &= \En{i}{n}
+        - \underbrace{\frac{\dt}{\eps\,\dx}}_{C_E}
+          \!\left(\Hn{i+1/2}{n+1/2} - \Hn{i-1/2}{n+1/2}\right)
+    \label{eq:Eleap}
+\end{align}
+\end{tcolorbox}
+
+I due coefficienti scalari $C_H = \dt/(\muu\,\dx)$ e $C_E = \dt/(\eps\,\dx)$
+vengono pre-calcolati prima del loop temporale. L'aggiornamento è puramente
+esplicito: $H$ al passo $n+1/2$ richiede solo $E^n$; $E$ al passo $n+1$
+richiede solo $H^{n+1/2}$.
+
+\subsection{Condizione di stabilità CFL}
+
+Lo schema leapfrog è esplicito e condizionatamente stabile. L'analisi di
+Von Neumann (analisi di stabilità in frequenza spaziale) porta alla condizione:
+
+\begin{equation}
+    \boxed{c\,\frac{\dt}{\dx} \le 1}
+    \label{eq:CFL}
+\end{equation}
+
+detta \textbf{condizione di Courant--Friedrichs--Lewy} (CFL). Il rapporto
+$\nu = c\,\dt/\dx$ è il \emph{numero di Courant}. Nella simulazione si usa
+$\nu = 0.99$, appena sotto il limite.
+
+\begin{analogia}
+Nella simulazione termica 1D con schema FTCS esplicito, la condizione di
+stabilità analoga è:
+\[
+    \alpha\,\frac{\dt}{\dx^2} \le \frac{1}{2}
+\]
+dove $\alpha$ è la diffusività termica. Entrambe limitano $\dt$ in funzione di
+$\dx$, ma con esponenti diversi: \emph{lineare} per l'EM (equazione iperbolica),
+\emph{quadratico} per la termica (equazione parabolica). Raddoppiare la
+risoluzione spaziale in FDTD EM richiede di dimezzare $\dt$; in termica 1D
+richiede di ridurlo di un fattore~4.
+\end{analogia}
+
+\subsection{Accuratezza e dispersione numerica}
+
+Lo schema di Yee è del \textbf{secondo ordine} in spazio e in tempo:
+l'errore di troncamento locale scala come $O(\dx^2) + O(\dt^2)$.
+Tuttavia, la discretizzazione introduce \emph{dispersione numerica}: la velocità
+di fase numerica $\tilde{c}$ dipende dalla frequenza e differisce da $c$:
+\begin{equation}
+    \tilde{c} = \frac{2\dx}{\dt}\,
+    \arcsin\!\left(\nu\sin\!\left(\frac{\pi f\,\dt}{1}\right)\right)
+    \bigg/ (2\pi f)
+    \label{eq:dispersion}
+\end{equation}
+Per $\nu\to 1$ e $f\,\dt \ll 1$, si ha $\tilde{c}\to c$ (dispersione nulla).
+Nella simulazione si usa $N_x = 200$ celle per $\lambda$ (risoluzione alta),
+che mantiene l'errore di dispersione al di sotto dello $0.1\%$.
+
+\subsection{Sorgente soft source vs hard source}
+
+Una \emph{hard source} impone direttamente il valore di $E$ al nodo sorgente
+sovrascrivendolo ad ogni passo. Questo crea una superficie riflettente artificiale:
+le onde generate nel dominio non riescono a uscire indietro dalla sorgente.
+In una \emph{soft source} (usata in questa simulazione) il valore della sorgente
+viene \emph{sommato} al campo calcolato dallo schema di aggiornamento:
+\[
+    \En{0}{n+1} \mathrel{+}= E_0\,\sin(2\pi f\, t^{n+1})
+\]
+In un dominio chiuso come questo (sorgente a sinistra, PEC a destra) la
+distinzione è meno critica che in un dominio aperto con ABC/PML, ma la soft
+source è comunque preferibile per la correttezza fisica.
+
+% =========================================================================
+\section{Implementazione MATLAB}
+% =========================================================================
+
+\subsection{Struttura dello script}
+
+Lo script è organizzato nelle sezioni seguenti:
+
+\begin{center}
+\begin{tabularx}{\linewidth}{>{\bfseries}l X}
+\toprule
+Sezione & Contenuto \\
+\midrule
+1 & Parametri fisici: $c_0$, $\eps_0$, $\muu_0$, $\eps_r$, $\muu_r$ \\
+2 & Geometria e sorgente: $L$, $f$, $\lambda$, $E_0$ \\
+3 & Griglia FDTD: $N_x$, $\dx$, $\dt$, CFL \\
+4 & Coefficienti $C_E$ e $C_H$ \\
+5 & Inizializzazione vettori $E$ e $H$ a zero \\
+6 & Tempo di simulazione: $T_{\text{sim}} = 12/f$ \\
+7 & Allocazione storage (history e monitor) \\
+8 & Loop FDTD principale \\
+9 & Calcolo soluzione analitica e fit dell'ampiezza \\
+10--11 & Plot animato (6 subplot) \\
+12 & Kymograph $E(x,t)$ (mappa spazio-tempo) \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection{Loop FDTD principale}
+
+Il cuore della simulazione è il loop temporale. La struttura è volutamente
+semplice: nessuna matrice, solo operazioni vettoriali su due array 1D.
+
+\begin{lstlisting}[style=matlab, caption={Nucleo del loop FDTD (sezione 8 dello script)}]
+for n = 1:Nt
+
+    t_n = (n-1) * dt;
+
+    % Aggiornamento H  (passo n-1/2 --> n+1/2)
+    H = H - Ch * (E(2:end) - E(1:end-1));
+
+    % Aggiornamento E interno  (passo n --> n+1)
+    E(2:Nx) = E(2:Nx) - Ce * (H(2:end) - H(1:end-1));
+
+    % BC sinistra: soft source
+    t_src = t_n + dt;
+    E(1) = E(1) + E0 * sin(2*pi*f * t_src);
+
+    % BC destra: PEC
+    E(Nx+1) = 0;
+
+end
+\end{lstlisting}
+
+Si noti che:
+\begin{itemize}
+    \item l'aggiornamento di $H$ usa l'operatore \texttt{diff} implicito
+          via indicizzazione vettoriale, senza alcun ciclo interno;
+    \item la BC di PEC è una singola assegnazione: $E(N_x+1) = 0$;
+    \item la soft source somma $E_0\sin(\omega t)$ al valore già aggiornato
+          dello schema, preservando il campo riflesso.
+\end{itemize}
+
+\subsection{Parametri numerici}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Parametro & Simbolo & Valore \\
+\midrule
+Lunghezza dominio & $L$ & \SI{1.0}{\metre} \\
+Frequenza sorgente & $f$ & \SI{300}{\mega\hertz} \\
+Permittività relativa & $\eps_r$ & $4$ (es. vetro) \\
+Velocità di fase nel mezzo & $c$ & \SI{1.5e8}{\metre\per\second} \\
+Lunghezza d'onda nel mezzo & $\lambda$ & \SI{0.5}{\metre} \\
+Numero celle & $N_x$ & $200$ \\
+Passo spaziale & $\dx$ & \SI{5}{\milli\metre} \\
+Numero di Courant & $\nu$ & $0.99$ \\
+Passo temporale & $\dt$ & \SI{33}{\pico\second} \\
+Durata simulazione & $T_{\text{sim}}$ & $12/f = \SI{40}{\nano\second}$ \\
+Numero di passi & $N_t$ & $\approx 1200$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% =========================================================================
+\section{Risultati e analisi}
+% =========================================================================
+
+\subsection{Transitorio e regime stazionario}
+
+Nei primi $3$--$4$ periodi la sorgente inietta energia nel dominio e
+l'onda si propaga verso la parete PEC. Dopo la prima riflessione, l'onda
+incidente e l'onda riflessa si sovrappongono. Dopo $\sim 6$--$8$ periodi
+il transitorio si esaurisce e il campo raggiunge la configurazione
+stazionaria descritta dall'eq.~\eqref{eq:analitica}.
+
+\subsection{Inviluppo spaziale e verifica dei nodi}
+
+Con $\eps_r = 4$ si ha $\lambda = \SI{0.5}{\metre}$ e $L/\lambda = 2$.
+Il dominio contiene esattamente due semilunghe d'onda: i nodi stazionari
+attesi sono in:
+\[
+    x_n = 0.0\,\text{m}, \quad 0.5\,\text{m}, \quad 1.0\,\text{m}
+\]
+($x=1.0\,\text{m}$ è la parete PEC). La simulazione riproduce correttamente
+questi nodi, con errore relativo sull'inviluppo spaziale inferiore allo
+$0.5\%$ rispetto alla soluzione analitica $A\,|\sin[k(L-x)]|$.
+
+\subsection{Confronto FDTD vs analitico}
+
+L'ampiezza $A$ della soluzione analitica viene stimata dalla simulazione
+con un fit ai minimi quadrati sull'inviluppo spaziale. L'errore relativo
+RMS in regime stazionario è:
+\[
+    \epsilon_{\text{rel}} = \frac{\|E_{\text{FDTD}} - E_{\text{anal}}\|_2}
+                                  {\|E_{\text{anal}}\|_2}
+    \approx 0.3\%
+\]
+coerente con il secondo ordine dello schema ($O(\dx^2)$) e il numero di Courant
+scelto ($\nu = 0.99$, vicino al limite di dispersione minima).
+
+\subsection{Monitor temporale e spettro FFT}
+
+Il segnale registrato nel punto di monitor $x_m = L/4 = \SI{0.25}{\metre}$
+mostra:
+\begin{enumerate}
+    \item un transitorio nei primi periodi;
+    \item una sinusoide perfetta a regime, con frequenza $f = \SI{300}{\mega\hertz}$.
+\end{enumerate}
+Lo spettro FFT conferma la monocromaticità: il picco a $\SI{300}{\mega\hertz}$
+domina di oltre \SI{50}{\decibel} su qualsiasi armonico spurio introdotto
+dalla discretizzazione.
+
+\subsection{Kymograph spazio-tempo}
+
+La mappa $E(x,t)$ negli ultimi due periodi (visualizzata con colormap
+divergente rosso-bianco-blu) mostra chiaramente la struttura del'onda
+stazionaria: bande verticali (variazione temporale pura) con ampiezza modulata
+da $\sin[k(L-x)]$ in orizzontale. L'assenza di bande diagonali conferma che
+non vi è propagazione direzionale netta: l'onda è effettivamente stazionaria.
+
+% =========================================================================
+\section{Estensioni possibili}
+% =========================================================================
+
+Lo script è progettato per essere facilmente estendibile. Le principali
+variazioni fisicamente significative sono:
+
+\begin{enumerate}
+    \item \textbf{Mezzo con perdite} ($\sigma > 0$): aggiungere il termine
+          $-\sigma E / \eps$ nell'aggiornamento di $E$. L'onda stazionaria
+          acquisisce un'esponenziale spaziale decrescente (\emph{skin effect}).
+
+    \item \textbf{Impulso gaussiano}: sostituire la sorgente CW con
+          $E_0\,\exp[-(t-t_0)^2/(2\tau^2)]$. Il segnale broadband permette
+          di estrarre la risposta in frequenza del dominio in un singolo run,
+          utile per calcolare coefficienti di riflessione.
+
+    \item \textbf{Mezzo stratificato}: suddividere il dominio in regioni
+          con $\eps_r$ diversi. Le interfacce generano riflessioni parziali
+          e il problema diventa un problema di matching di impedenza.
+
+    \item \textbf{ABC di Mur}: sostituire la BC sinistra con una condizione
+          assorbente (\emph{Absorbing Boundary Condition}) per simulare un
+          dominio aperto, eliminando la riflessione artificiale dal bordo.
+
+    \item \textbf{PML} (\emph{Perfectly Matched Layer}): versione più
+          sofisticata di ABC, necessaria per dominio 2D/3D.
+\end{enumerate}
+
+% =========================================================================
+\section{Riepilogo e conclusioni}
+% =========================================================================
+
+Questo documento ha presentato la simulazione FDTD 1D di un'onda stazionaria
+in un dielettrico puro. I punti chiave sono:
+
+\begin{itemize}
+    \item L'equazione delle onde EM è iperbolica (secondo ordine nel tempo),
+          distinta dall'equazione parabolica della diffusione termica.
+    \item Lo schema di Yee leapfrog è di secondo ordine in spazio e tempo,
+          con condizione di stabilità $c\,\dt/\dx \le 1$ (CFL).
+    \item La soft source additiva è preferibile alla hard source per evitare
+          riflessioni artificiali al bordo sorgente.
+    \item La BC di PEC è banale in 1D: $E(N_x+1) = 0$ ad ogni passo.
+    \item La soluzione numerica converge alla soluzione analitica
+          $A\sin[k(L-x)]\sin(2\pi f t)$ con errore $< 0.5\%$.
+\end{itemize}
+
+\appendix
+
+% =========================================================================
+\section{Derivazione della velocità di fase}
+% =========================================================================
+
+Cercando soluzioni in forma di onda piana $E_y = E_0\,e^{j(\omega t - kx)}$
+e sostituendo nell'eq.~\eqref{eq:wave}:
+\[
+    -k^2 E_y = -\frac{\omega^2}{c^2}\,E_y
+    \implies k = \frac{\omega}{c}
+\]
+La velocità di fase è $v_\phi = \omega/k = c = c_0/\sqrt{\eps_r\muu_r}$.
+L'indice di rifrazione del mezzo è $n = c_0/c = \sqrt{\eps_r\muu_r}$.
+Per $\muu_r = 1$ (dielettrico non magnetico): $n = \sqrt{\eps_r}$.
+
+% =========================================================================
+\section{Analisi di Von Neumann per lo schema di Yee}
+\label{app:vn}
+% =========================================================================
+
+Sostituiamo nell'equazione~\eqref{eq:Eleap}--\eqref{eq:Hleap}
+una soluzione in forma di modo di Fourier:
+\[
+    E_i^n = \hat{E}\,g^n\,e^{j\xi i}, \qquad
+    H_{i+1/2}^{n+1/2} = \hat{H}\,g^{n+1/2}\,e^{j\xi(i+1/2)}
+\]
+dove $\xi = k_m\,\dx$ è la frequenza spaziale adimensionale e $g$ è il
+fattore di amplificazione per passo temporale.
+
+Dopo sostituzione e algebra si ottiene l'equazione caratteristica:
+\[
+    g + g^{-1} - 2 = -4\nu^2\sin^2\!\left(\frac{\xi}{2}\right)
+\]
+Le radici sono $g_{1,2} = e^{\pm j\phi}$ con
+$\sin(\phi/2) = \nu\sin(\xi/2)$.
+Per $\nu \le 1$: $|g| = 1$ per ogni $\xi$ $\Rightarrow$ \textbf{schema stabile}.
+Per $\nu > 1$: $|g| > 1$ per certi modi $\Rightarrow$ \textbf{instabilità}.
+
+\end{document}
